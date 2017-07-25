@@ -129,10 +129,31 @@ func (f *film80s) parseList(filmURL, listURL string, listData chan<- film80sData
 
 func (f *film80s) parseDetail(listData <-chan film80sData) <-chan Data {
 	datas := make(chan Data, 1024)
+	getDownloadFunc := func(detailURL string) map[string]string {
+		tmp := map[string]string{}
+		res := map[string]string{}
+		doc, _ := goquery.NewDocument(detailURL)
+		doc.Find(".container #mainbody #files div").Each(func(i int, s *goquery.Selection) {
+			s.Find("#dl-tab li a").Each(func(i int, ss *goquery.Selection) {
+				if id, _ := ss.Attr("aria-controls"); id != "" {
+					tmp[id] = ss.Text()
+				}
+			})
+			for key, val := range tmp {
+				s.Find(fmt.Sprintf("#dl-tab-panes #%s table tbody tr td a", key)).Each(func(i int, ss *goquery.Selection) {
+					if downLoadURL, exists := ss.Attr("href"); exists && downLoadURL != "" {
+						res[val] = downLoadURL
+					}
+				})
+			}
+		})
+		return res
+	}
 	go func() {
 		defer close(datas)
 		for ldata := range listData {
 			data := ldata
+			data.downloadAddrs = getDownloadFunc(data.detailURL)
 			datas <- &data
 		}
 	}()
